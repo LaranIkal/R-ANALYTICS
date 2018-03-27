@@ -1,5 +1,5 @@
 ---
-title: "String Clustering With stringdist"
+title: "Time Series Hybrid Algorithm"
 author: "Carlos Kassab"
 date: "March 27, 2018"
 output: html_document
