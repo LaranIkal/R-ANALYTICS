@@ -1,15 +1,18 @@
 ---
 title: "Time Series Hybrid Algorithm"
 author: "Carlos Kassab"
-date: "March 27, 2018"
+date: "April 19, 2018"
 output: html_document
 ---
 
 ```{r TimeSeries Using Hybrid Algorithms, echo = TRUE, comment = ">", warning = FALSE}
 
 ###############################################################################
-# This idea was taken from: https://robjhyndman.com/hyndsight/show-me-the-evidence/
+# The idea of using hybrid algorithm was taken from: 
+# https://robjhyndman.com/hyndsight/show-me-the-evidence/
 ###############################################################################
+
+
 
 
 
