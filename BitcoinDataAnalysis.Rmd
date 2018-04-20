@@ -1,0 +1,149 @@
+---
+title: "Bitcoin Data Analysis"
+author: "Carlos Kassab"
+date: "April 19, 2018"
+output: html_document
+---
+
+### ---------------------------------------------------------------------------
+### Bitcoin data analysis. 
+### Exploratory data analysis: data summary and histogram for normality test.
+### Outliers Analysis.
+### Time Series Decomposition.
+### ---------------------------------------------------------------------------
+
+```{r Bitcoin - TimeSeries Analysis, echo = TRUE, comment = ">", comment = ">", warning = FALSE}
+
+###############################################################################
+# Loading needed libraries
+###############################################################################
+suppressWarnings( suppressMessages( library( lubridate ) ) )
+suppressWarnings( suppressMessages( library( xts ) ) )
+suppressWarnings( suppressMessages( library( tidyverse ) ) )
+suppressWarnings( suppressMessages( library( dygraphs ) ) )
+suppressWarnings( suppressMessages( library( data.table ) ) )
+suppressWarnings( suppressMessages( library( stlplus ) ) )
+
+
+###############################################################################
+# Loading data file
+###############################################################################
+allData = fread( "BTC.csv", header = TRUE, sep = "," , dec = ".",
+                 check.names = FALSE )
+
+# Avoid any NA from our data.
+allData = na.omit(allData)
+
+summary( allData )
+
+# We can see our data seems to be correct, the max values seems to be outliers 
+# because bitcoin price raised a lot.
+
+
+###############################################################################
+# Let's continue with the histogram for each variable.
+###############################################################################
+
+CreateHistogram <- function( mySeries, valueType ) {
+  h <- hist( mySeries, probability = T
+             , main = paste0( "Histogram - Graphical Normality Test - ", valueType)
+             , xlab = "Values", ylab = "", col = "red" )
+  lines( density( mySeries, na.rm = T ), lwd = 2, col = "green" )
+  mu <- mean( mySeries, na.rm = T)
+  sigma <- sd( mySeries, na.rm = T)
+  x <- seq( min( h$mids,na.rm = T), max(h$mids,na.rm = T )
+            , length = length( mySeries ) )
+  y <- dnorm( x, mu, sigma )
+  lines( x, y, lwd = 2, col = "blue" )
+  
+}
+
+
+CreateHistogram( allData$open, "Open" )
+CreateHistogram( allData$high, "High" )
+CreateHistogram( allData$low, "Low" )
+CreateHistogram( allData$close, "Close" )
+
+# As we can see most of our data is in the range of 0-5000
+# So, we can see our outliers but, I have decided to keep them because I mentioned,
+# the raise in the Bitcoin price has been impressive 
+
+###############################################################################
+# Let's continue with the variables frequency.
+# Our dates frequency is daily as we can see.
+###############################################################################
+
+datesSeq = seq( as.Date( allData$date[1] ), as.Date( allData$date[dim(allData)[1]] ), "day" )
+
+if( length( datesSeq ) == dim(allData)[1] ){
+  print( "We have a daily frequency." )
+}
+
+
+###############################################################################
+# Let's continue with the outlier analysis.
+# I am doing the outlier analysis just to show how I do it, because
+# I am not going to delete any outlier in this case.
+###############################################################################
+
+# The idea of this outlier analysis came from:
+# https://stackoverflow.com/questions/12888212/detecting-outliers-on-wide-data-frame#12888285
+# I ported this analysis to data.table for better performance.
+
+# Assign data to new variable and ensure data.table
+# Just for the open variable, we have seen in the histogram, the behavior is similar.
+dat <- data.table( allData[,c(1,3)] )
+
+# Defining our data.table key
+setkey( dat, "date" )
+
+# Compute mean and sd
+dat <- dat[, Mean := mean( open, na.rm = TRUE )]  
+dat <- dat[, SD := sd( open, na.rm = TRUE )]
+
+# Our outlier threshold -- Set outlier flag
+dat <- dat[, outlier := ( abs( open - Mean ) > 3*SD )]
+
+# Print Outliers
+dat[ outlier == TRUE ]
+
+# We can see that there are not so many outliers but as mentioned, in this case 
+# we will not remove them and continue to use the hybrid prediction algorithm.
+
+
+###############################################################################
+# Time Series Decomposition.
+###############################################################################
+
+tsDecompose <- function( myDates, myValues, valueType ){
+  
+  # Ensuring variables data type
+  myDates = as.Date(myDates)
+  myValues = as.numeric(as.character(myValues))
+  
+  # Creating time series
+  data_xts <- xts( myValues, myDates )
+  
+  # Decomposing our time series
+  # Using stlplus for non regular time series
+  data_stl <- stlplus( as.ts( data_xts ), s.window = "period", n.p = length( data_xts ) )
+  
+  plot( data_stl, ylab = "Quantity", xlab = "Year"
+        , main = paste0( "Data Decomposition For Value Type: ", valueType ) )
+  
+}
+
+tsDecompose( allData$date, allData$open, "Open" )
+tsDecompose( allData$date, allData$high, "High" )
+tsDecompose( allData$date, allData$low, "Low" )
+tsDecompose( allData$date, allData$close, "Close" )
+
+
+# As we can see the four charts are very similar
+# At the end of the raw data we see that Bitcoin prices raised a lot
+# We cannot see trend because we have a lot of data and the increase of prices
+# was at the end of the data.
+
+
+```
+
