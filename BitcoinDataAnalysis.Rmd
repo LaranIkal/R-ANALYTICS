@@ -17,13 +17,38 @@ output: html_document
 ###############################################################################
 # Loading needed libraries
 ###############################################################################
+
+# Tools to make easier to parse and manipulate dates.
 suppressWarnings( suppressMessages( library( lubridate ) ) )
+
+# Library to create extensible time-series objects
 suppressWarnings( suppressMessages( library( xts ) ) )
+
+# To make it easy to install and load multiple 'tidyverse' packages in a single step. 
 suppressWarnings( suppressMessages( library( tidyverse ) ) )
+
+# For interactive time series plotting
 suppressWarnings( suppressMessages( library( dygraphs ) ) )
+
+# Enhanced data.frame library
 suppressWarnings( suppressMessages( library( data.table ) ) )
+
+# To decompse time series allowing NA values, local quadratic smoothing, 
+# post-trend smoothing, and endpoint blending.
 suppressWarnings( suppressMessages( library( stlplus ) ) )
 
+# Forecasting Functions for Time Series and Linear Models
+suppressWarnings( suppressMessages( library( forecast ) ) )
+
+# Create an HTML table widget using the DataTables library
+# providing an R interface to the JavaScript library DataTables.
+suppressWarnings( suppressMessages( library( DT ) ) )
+
+# Popular technical technical analysis functions
+suppressWarnings( suppressMessages( library( TTR ) ) )
+
+# Generalized Boosted Regression Models Package.
+suppressWarnings( suppressMessages( library( gbm ) ) )
 
 ###############################################################################
 # Loading data file
@@ -32,21 +57,40 @@ allData = fread( "BTC.csv", header = TRUE, sep = "," , dec = ".",
                  check.names = FALSE )
 
 # Avoid any NA from our data.
-allData = na.omit(allData)
+allData = na.omit( allData )
 
+# Showing 6 lines of our data:
+head( allData )
+
+# And our data summary:
 summary( allData )
 
 # We can see our data seems to be correct, the max values seems to be outliers 
 # because bitcoin price raised a lot.
 
+# Showing a chart with our data.
+# We need to create a time series for dygraph
+allDataOpen_xts <- xts( allData$open, order.by = as.Date( allData$date ) )
+
+# Creating our chart.
+dygraph( allDataOpen_xts
+         , main = paste0( "Bitcoin Data Open Cost From: ", allData$date[1]
+                          , " to: ", allData$date[length( allData$date )]  )
+         , ylab = "Open Cost." ) %>%
+  dyRangeSelector( height = 20, strokeColor = "" ) %>%
+  dyOptions( axisLineColor = "navy", 
+             gridLineColor = "lightblue" )
+
+# It seems that our data has not seasonality but it has a trend, we will see in the histograms.
 
 ###############################################################################
 # Let's continue with the histogram for each variable.
 ###############################################################################
 
-CreateHistogram <- function( mySeries, valueType ) {
+# Function to create histograms.
+CreateHistogram <- function( mySeries, valueDesc ) {
   h <- hist( mySeries, probability = T
-             , main = paste0( "Histogram - Graphical Normality Test - ", valueType)
+             , main = paste0( "Histogram - Bitcoin Graphical Normality Test - ", valueDesc)
              , xlab = "Values", ylab = "", col = "red" )
   lines( density( mySeries, na.rm = T ), lwd = 2, col = "green" )
   mu <- mean( mySeries, na.rm = T)
@@ -55,28 +99,32 @@ CreateHistogram <- function( mySeries, valueType ) {
             , length = length( mySeries ) )
   y <- dnorm( x, mu, sigma )
   lines( x, y, lwd = 2, col = "blue" )
-  
 }
 
 
-CreateHistogram( allData$open, "Open" )
-CreateHistogram( allData$high, "High" )
-CreateHistogram( allData$low, "Low" )
-CreateHistogram( allData$close, "Close" )
+# Calling our CreateHistogram function for each quantitative variable
+CreateHistogram( allData$open, "Cost at Opening" )
+CreateHistogram( allData$high, "Highest Cost" )
+CreateHistogram( allData$low, "Lowest Cost" )
+CreateHistogram( allData$close, "Closing Cost" )
 
 # As we can see most of our data is in the range of 0-5000
 # So, we can see our outliers but, I have decided to keep them because I mentioned,
-# the raise in the Bitcoin price has been impressive 
+# the raise in the Bitcoin price has been impressive and I wanto to include this 
+# trend in our analysis.
 
 ###############################################################################
-# Let's continue with the variables frequency.
-# Our dates frequency is daily as we can see.
+# Let's continue to see if the variables are daily, so we are not missing any day
 ###############################################################################
 
-datesSeq = seq( as.Date( allData$date[1] ), as.Date( allData$date[dim(allData)[1]] ), "day" )
+# Creating a daily date sequence from our first date to the last date in our data:
+dateSeq = seq( as.Date( allData$date[1] )
+               , as.Date( allData$date[dim( allData )[1]] ), "day" )
 
-if( length( datesSeq ) == dim(allData)[1] ){
-  print( "We have a daily frequency." )
+# If the length of our created sequence and the length of our data is the same,
+# then our data is daily.
+if( length( dateSeq ) == dim( allData )[1] ){
+  print( "We have a daily data" )
 }
 
 
@@ -90,32 +138,40 @@ if( length( datesSeq ) == dim(allData)[1] ){
 # https://stackoverflow.com/questions/12888212/detecting-outliers-on-wide-data-frame#12888285
 # I ported this analysis to data.table for better performance.
 
-# Assign data to new variable and ensure data.table
-# Just for the open variable, we have seen in the histogram, the behavior is similar.
+# Assign data to new variable and ensure data.table format.
+# We are doing this just for the open variable, we have seen in the histogram,
+# the behavior is similar for all variables.
 dat <- data.table( allData[,c(1,3)] )
 
-# Defining our data.table key
+# Defining a key for our data.table.
 setkey( dat, "date" )
 
-# Compute mean and sd
+# In preparation to get the outliers, compute mean and standard deviation and 
+# set outlier thershold.
+
+# Compute mean and standard deviation(SD).
 dat <- dat[, Mean := mean( open, na.rm = TRUE )]  
 dat <- dat[, SD := sd( open, na.rm = TRUE )]
 
-# Our outlier threshold -- Set outlier flag
+# Our outlier threshold value -- Set outlier flag
 dat <- dat[, outlier := ( abs( open - Mean ) > 3*SD )]
 
-# Print Outliers
-dat[ outlier == TRUE ]
+# Print a sample of outliers in our data.
+head( dat[ outlier == TRUE ] )
+
+# Total outlier records count.
+dim( dat[ outlier == TRUE ] )[1]
 
 # We can see that there are not so many outliers but as mentioned, in this case 
 # we will not remove them and continue to use the hybrid prediction algorithm.
-
+# We can see also that the outliers are showing the trending of our data
 
 ###############################################################################
 # Time Series Decomposition.
 ###############################################################################
 
-tsDecompose <- function( myDates, myValues, valueType ){
+# Creating function to decompose
+tsDecompose <- function( myDates, myValues, valueDesc ){
   
   # Ensuring variables data type
   myDates = as.Date(myDates)
@@ -129,21 +185,250 @@ tsDecompose <- function( myDates, myValues, valueType ){
   data_stl <- stlplus( as.ts( data_xts ), s.window = "period", n.p = length( data_xts ) )
   
   plot( data_stl, ylab = "Quantity", xlab = "Year"
-        , main = paste0( "Data Decomposition For Value Type: ", valueType ) )
+        , main = paste0( "Bitcoin Data Decomposition For: ", valueDesc ) )
   
 }
 
-tsDecompose( allData$date, allData$open, "Open" )
-tsDecompose( allData$date, allData$high, "High" )
-tsDecompose( allData$date, allData$low, "Low" )
-tsDecompose( allData$date, allData$close, "Close" )
+tsDecompose( allData$date, allData$open, "Cost at Opening" )
+tsDecompose( allData$date, allData$high, "Highest Cost" )
+tsDecompose( allData$date, allData$low, "Lowest Cost" )
+tsDecompose( allData$date, allData$close, "Closing Cost" )
 
 
 # As we can see the four charts are very similar
-# At the end of the raw data we see that Bitcoin prices raised a lot
-# We cannot see trend because we have a lot of data and the increase of prices
-# was at the end of the data.
+# At the end of the raw data we see that Bitcoin prices raised.
+# We can see again trend in the price increasing a lot.
 
 
+
+###############################################################################
+# Funtions for error calculation and algorithm calibration
+###############################################################################
+
+# RMSE root mean square deviation calculation to measure the fit of calculation
+RMSE = function( pred, real ){
+  return( sqrt( mean( ( pred - real )^2 ) ) )
+}
+
+
+
+# Non-Seasonal Holt-Winters Calibration
+NonSeasonalHoltWintersCalibration <- function( training_series, testing_data ) {
+  error.c <- Inf
+  alpha.i <- 0.1  # alpha cannot be zero
+  
+  while( alpha.i <= 1 ) {
+    beta.i <- 0
+    while( beta.i <= 1 ) {
+      mod.i <- HoltWinters( training_series
+                            , alpha = alpha.i
+                            , beta = beta.i
+                            , gamma = FALSE )
+      
+      res.i <- predict( mod.i, n.ahead = length( testing_data ) )
+      error.i <- sqrt( RMSE( res.i, testing_data ) )
+      
+      if( error.i < error.c ) {
+        error.c <- error.i
+        mod.c <- mod.i         
+      }
+      
+      beta.i <- beta.i + 0.1
+    }
+    
+    alpha.i <- alpha.i + 0.1
+  } 
+  
+  return( mod.c )
+}
+
+
+
+
+# ARMA Model Calibration
+ARMACalibration <- function( training_series, testing_data ) {
+  # Set up the parameter sets over which we want to operate
+  # As we are using ARMA, we do not need the seasonal parameters
+  parameters <- expand.grid( ar = 0:4, diff = 0:2, ma = 0:4 )
+  
+  # A vector to hold the BIC values for each combination of model
+  modelValues <- rep( 0, nrow( parameters ) )
+  
+  best_rmse <- 1e+10
+  for (i in seq(along = modelValues)) {
+    result = tryCatch( {
+      fit <- arima( training_series, order = unlist( parameters[i, 1:3] ) )
+      }, warning= function(w){}
+      , error = function(e) {
+        result2 = tryCatch( {
+            if( regexpr( 'non-stationary AR part from CSS', e ) ){
+              fit <- arima( training_series, order = unlist( parameters[i, 1:3] )
+                            , seasonal = list( order = c( 1, 0, 0 ), period = NA )
+                            ,  method = "ML" )
+            }
+          
+            if( regexpr( 'optim.method, hessian = TRUE', e ) ){
+              fit <- arima( training_series, order = unlist( parameters[i, 1:3] )
+                            , method = "CSS", hessian = FALSE )
+            }          
+        }, warning= function(w){}, error = function(e) {
+            result3 = tryCatch( {
+                if( regexpr( 'optim.method, hessian = TRUE', e ) ){
+                  fit <- arima( training_series, order = unlist( parameters[i, 1:3] )
+                                , seasonal = list( order = c( 1, 0, 0 ), period = NA )
+                                , method = "ML", hessian = FALSE )
+                }
+            }, warning= function(w){}, error = function(e) {}
+            )            
+          }
+        )
+      }
+    )
+
+    result33 = tryCatch( {
+      predARMA <- predict( fit, n.ahead = length( testing_data ) )
+      actual_rmse <- sqrt( RMSE( predARMA$pred[1:length(testing_data)], testing_data ) )         
+      
+      if ( actual_rmse < best_rmse ) {
+        best_rmse <- actual_rmse
+        bestModel <- fit
+        ARMAp <<- parameters[i, 1] 
+        ARMAd <<- parameters[i, 2]
+        ARMAq <<- parameters[i, 3]     
+        #print( paste("Sequence:",i,"Model Parameters:",ARMAp,ARMAd,ARMAq,"MSE:", best_rmse))
+      }
+    }, warning= function(w){}, error = function(e) {} )
+  }
+  return( bestModel )
+}
+
+
+
+### Get our training and testing data, leaving 3 days for testing and the rest for training
+dates_training = ymd( tail( allData$date, -3 ) )
+data_training = tail( allData$open, -3 )
+
+dates_testing = ymd( tail( allData$date, 3 ) )
+data_testing = tail( allData$open, 3 )
+
+# Creating our training time series
+training_xts = xts( data_training, dates_training )
+
+# Holt Winters Prediction Processes
+hwModel = NonSeasonalHoltWintersCalibration( training_xts, data_testing )
+hwModel
+
+# Creating 3 day prediction
+hwPred = floor( predict( hwModel, n.ahead = 3 ) )
+
+
+
+
+# ARMA Prediction Processes
+armaModel = ARMACalibration( training_xts, data_testing )
+armaModel
+
+# Creating 3 day prediction
+armaPred = floor( predict( armaModel, n.ahead = 3 )$pred )      
+
+
+
+
+# Using gbm, stochastic gradient boosting machines.
+# This aproach was taken from this page:
+# https://rstudio-pubs-static.s3.amazonaws.com/161075_05ce98dc51c844e0833c06835c9ce4c3.html
+
+# Storing our data in a temporary variable to do some feature engineering. 
+allDataGBM = allData
+
+# Get days data in this way because my system is in spanish and it was setting values in spanish
+allDataGBM$days <- c( "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", 
+                      "Friday", "Saturday" )[as.POSIXlt(allDataGBM$date)$wday + 1]
+
+allDataGBM$weeks <- ifelse( allDataGBM$days == "Saturday" |
+                                allDataGBM$days == "Sunday"
+                              , "Weekend", "Weekday" )
+allDataGBM$month <- as.numeric( format( as.Date( allDataGBM$date ), "%m" ) )
+allDataGBM$year <- as.numeric( format( as.Date( allDataGBM$date ), "%Y" ) )
+allDataGBM$weeknum <- lubridate::week(ymd( allDataGBM$date ) )
+
+# Showing 6 lines of our training data:
+head( allDataGBM )
+
+# Calculating moving average for 3 days because we want to predct the next 3 days
+set.seed( 150 )
+allDataGBM$ma <- EMA( allDataGBM$open, 3 )
+allDataGBM <- allDataGBM[-(1:3),] # Removing the first 3 values because the moving average
+
+# Converting our variables to factors
+allDataGBM$days <- as.factor( allDataGBM$days )
+allDataGBM$weeks <- as.factor( allDataGBM$weeks )
+allDataGBM$weeknum <- as.factor(allDataGBM$weeknum)
+allDataGBM$month <- as.factor(allDataGBM$month)
+allDataGBM$year <- as.factor(allDataGBM$year)
+
+# Splitting our data, leaving 3 days for testing
+allDataTrain = tail( allDataGBM, -3 )
+allDataTest = tail( allDataGBM, 3 )
+
+allDataTestOpen = allDataTest$open
+allDataTest$open = NULL # Eliminates variable open from dataframe
+head( allDataTest )
+
+# Creates formula for GBM usage
+formulaForGBM <- open~( days + weeks + weeknum + month + year )*ma
+
+# Creating GBM model
+gbmModel <- gbm( formulaForGBM, data = allDataTrain, n.trees = 100000 )
+
+# Creating GBM prediciton.
+gbmPred <- floor( predict( gbmModel, newdata = allDataTest, n.trees = 100000 ) )
+
+
+# Hybrid prediction
+# The hybrid prediction is based in summing Holt Winters plus ARIMA plus GBM 
+# predictions and dividing by 3
+# The idea of using hybrid algorithm came from: 
+# https://robjhyndman.com/hyndsight/show-me-the-evidence/
+# The difference is that we are adding GBM and dividing by 3
+
+hybridPred = floor( ( hwPred[1:3] + armaPred[1:3] + gbmPred ) / 3 )
+
+
+#########################################################################
+# Getting all data together
+#########################################################################
+
+allDataTogether <- data.frame( Date = dates_testing
+                               , ActualOpenCost = data_testing
+                               , HoltWinters_Pred = hwPred[1:3]
+                               , ARMA_Pred = armaPred[1:3]
+                               , GBM_Pred = gbmPred
+                               , Hybrid_Pred = hybridPred
+                               , HoltWinters_Pred_Difference = floor( abs( data_testing - hwPred[1:3] ) )
+                               , ARMA_Pred_Difference = floor( abs( data_testing - armaPred[1:3] ) )
+                               , GBM_Pred_Difference = floor( abs( data_testing - gbmPred ) )
+                               , Hybrid_Pred_Difference = floor( abs( data_testing - hybridPred ) ) )
+            
+
+###############################################################################
+# Showing everything together
+###############################################################################
+datatable( allDataTogether, filter = 'none' )
+
+###############################################################################
+# Conclusion
+#
+# If we are interested in the first prediction day, the hybrid prediction is the best to use.
+#
+# If we are interested in the second prediction day, we should take the GBM approach.
+#
+# For the third day, ARMA is the one we must use.
+#
+# The thing here would be to use it in a production environment with the criteria
+# for our predictions mentioned above, it is, use different models for different days
+# and see our results.
+###############################################################################
+ 
 ```
 
