@@ -8,7 +8,7 @@ output: html_document
 ```{r, echo = TRUE, comment = ">", warning = FALSE}
 # Loading needed libraries
 # R quality control library
-suppressWarnings( suppressMessages( library( qcc ) ) )
+suppressWarnings( suppressMessages( library( qcc ) ) ) 
 # One of the R nice charts library
 suppressWarnings( suppressMessages( library( dygraphs ) ) )
 
