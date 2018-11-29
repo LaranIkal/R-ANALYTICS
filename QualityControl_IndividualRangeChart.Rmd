@@ -88,7 +88,7 @@ if( identical( ourBeyondLimits, qccBeyondLimits ) ) {
 #                 Creating a nice chart using dygraphs.                       #
 ###############################################################################
 
-# Getting our dataframe as dygraphs needs it, note BeyondLimits is initialized to NA
+# Getting our dataframe as dygraphs needs it, note BeyondLimits is initialized to NA 
 measurementsData = data.frame( Sequence = seq( 1, length( measurements ), 1 )
                                , Values = measurements, BeyondLimits = NA )
 
