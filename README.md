@@ -3,7 +3,7 @@ How to do things related to R, Installation, packages usage and algorithm sample
 
 See my blog at:
 
-http://laranikalranalytics.blogspot.com
+https://laranikalranalytics.blogspot.com
 
 
 
